@@ -1,0 +1,33 @@
+#!/bin/sh
+# 各マスターノードのHDDについてユーザーごと使用率を取得
+# 毎日4時に1度実行される。
+
+file=`mktemp`
+trap 'rm $file' 0 1 2 3 15
+pass=`openssl rsautl -decrypt -inkey ~/.ssh/id_rsa -in /home/web/.ssh/password.rsa`
+db="oprate"
+table="statdisk"
+
+for i in `/opt/pbs/bin/qstat -Q |grep work|awk '{print $1}'|cut -c 6-`
+do
+  j=$i"00"
+  sudo -u guest /usr/bin/rsh $j "ionice -c 3 /usr/local/bin/diskuse"  > $file
+  first=`grep -e "guest" -n $file|sed -e 's/:.*//g'`
+  last=`cat $file|wc -l`
+  last=`expr $last - 2`
+  Insert="insert into $db.$table (User,$i) values"
+  for j in `seq $first $last`
+  do
+    line=`sed -e s/\,//g $file| head -n $j| tail -n 1`
+    user=`echo $line | awk '{print $1}'`
+    used=`echo $line | awk '{print $2}'`
+    used=`expr $used \/ 1024`
+    if [ $j -eq $last ]; then
+      Insert+="(\"$user\",$used)"
+    else
+      Insert+="(\"$user\",$used),"
+    fi
+  done
+  Insert+=" on duplicate key update User = values(User), $i = values($i);"
+  result=$(mysql -u root --password=$pass $db -N -e "$Insert")
+done

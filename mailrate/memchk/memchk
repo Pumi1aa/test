@@ -1,0 +1,23 @@
+#!/bin/sh
+
+temp=`mktemp`
+trap "rm $temp" 0 1 2 3 15
+nodenum=`cat /etc/hosts.equiv | grep client| wc -l`
+host=`hostname | rev | cut -c 11- | rev`
+if [[ $HOSTNAME = "yoyogi"* ]]; then
+  host=yoyogi
+fi
+
+echo "Hostname Copy Scale Add Triad" >> $temp
+for i in `seq -f %02.0f 0 $nodenum`
+do
+  j=$host$i
+  result=`rsh $j /home/sato/memorychk/stream_openmp`
+  copy=`echo "$result"|grep Copy|awk '{printf $2}'`
+  scale=`echo "$result"|grep Scale|awk '{printf $2}'`
+  add=`echo "$result"|grep Add|awk '{printf $2}'`
+  triad=`echo "$result"|grep Triad|awk '{printf $2}'`
+
+  echo $j $copy $scale $add $triad >>$temp
+done
+cat $temp |column -t
